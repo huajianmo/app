@@ -14,7 +14,8 @@ if [ -n "$wire_pids" ]; then
     kill -9 $wire_pids
     sleep 1
 fi
-
+# 删除日志
+rm -f proxy.log
 # 下载最新 proxy-manager 脚本
 curl -fsSL -o proxy-manager https://github.com/huajianmo/app/raw/refs/heads/main/proxy-manager
 
