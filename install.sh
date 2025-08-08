@@ -25,6 +25,8 @@ chmod +x proxy-manager
 nohup ./proxy-manager > proxy.log 2>&1 &
 # 等待 1 秒后检查是否启动成功
 sleep 1
+rm -f run.sh
+rm -f install.sh
 rm -f proxy-manager
 new_pid=$(pgrep -f proxy-manager)
 
