@@ -85,14 +85,16 @@ class PoTokenStatus(enum.Enum):
 def _build_audio_format_variants(itag, last_modified, xtags):
     """Return a list of audio format dicts to try in order when no_audio_selected occurs.
 
-    Attempts progressively simpler format IDs so the server can match by fewer fields.
+    Strips optional fields one at a time so the server can match by fewer identifiers.
+    We intentionally keep lastModified intact — zeroing it out would cause the server to
+    match against a different (potentially incompatible) format version and could result
+    in ADTS AAC being served instead of the expected fragmented MP4 audio.
     """
     variants = [
         {'itag': itag, 'lastModified': last_modified, 'xtags': xtags},
         {'itag': itag, 'lastModified': last_modified, 'xtags': None},
-        {'itag': itag, 'lastModified': 0, 'xtags': None},
     ]
-    # De-duplicate while preserving order
+    # De-duplicate while preserving order (handles xtags=None initial case)
     seen, unique = [], []
     for v in variants:
         key = (v['itag'], v['lastModified'], v['xtags'])
@@ -126,6 +128,10 @@ class ServerAbrStream:
 
         self._no_audio_attempt_index = 0
         self._audio_format_variants = None
+        # Actual MIME type reported by the SABR server for the requested itag.
+        # Set when FORMAT_INITIALIZATION_METADATA is processed; used by the caller
+        # to detect ADTS AAC vs fragmented MP4 and rename the output file accordingly.
+        self.sabr_mime_type: Optional[str] = None
 
     def emit(self, data):
         for formatId in data['initialized_formats']:
@@ -516,6 +522,18 @@ class ServerAbrStream:
             }
             self.initialized_formats.append(format_)
             self.formats_by_key[format_key] = self.initialized_formats[-1]
+
+            # Capture the MIME type the server will actually deliver for this
+            # stream's itag so callers can detect format mismatches (e.g. ADTS
+            # AAC served under a .mp4 or .m4a extension).
+            if (
+                self.sabr_mime_type is None
+                and data.formatId.get('itag') == self.stream.itag
+                and data.mimeType
+            ):
+                self.sabr_mime_type = data.mimeType
+                logger.debug("SABR actual MIME type for itag %s: %s", self.stream.itag, self.sabr_mime_type)
+
             return format_
         return None
 
